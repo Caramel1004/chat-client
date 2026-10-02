@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    margin: 0;
+    min-width: 320px;
+    background: #f6f7f9;
+    color: #0f172a;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: #e0e7ff;
+    color: #312e81;
+  }
+
+  a:focus-visible, button:focus-visible, [role="log"]:focus-visible {
+    outline: 2px solid #4f46e5;
+    outline-offset: 4px;
+  }
+}
