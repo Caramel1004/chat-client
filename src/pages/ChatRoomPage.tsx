@@ -1,17 +1,17 @@
 import { useEffect, useRef } from 'react'
 import { Link, useParams } from 'react-router'
 import { MessageComposer } from '../components/MessageComposer'
-import { rooms } from '../data/rooms'
-import type { Message } from '../types/chat'
+import type { Message, Room } from '../types/chat'
 
 interface ChatRoomPageProps {
+  rooms: Room[]
   messages: Message[]
   onSend: (roomId: string, text: string) => void
 }
 
 const timeFormat = new Intl.DateTimeFormat('ko-KR', { hour: 'numeric', minute: '2-digit' })
 
-export function ChatRoomPage({ messages, onSend }: ChatRoomPageProps) {
+export function ChatRoomPage({ rooms, messages, onSend }: ChatRoomPageProps) {
   const { roomId } = useParams()
   const room = rooms.find(item => item.id === roomId)
   const roomMessages = messages.filter(message => message.roomId === roomId)
@@ -37,8 +37,8 @@ export function ChatRoomPage({ messages, onSend }: ChatRoomPageProps) {
         <header className="flex items-center gap-4 border-b border-slate-200 px-4 py-4 sm:px-6">
           <Link to="/" aria-label="채팅 목록으로" className="flex size-10 shrink-0 items-center justify-center rounded-lg text-xl text-slate-600 hover:bg-slate-100">←</Link>
           <div className="min-w-0">
-            <h1 id="room-heading" className="text-lg font-bold">{room.name}</h1>
-            <p className="mt-0.5 text-xs text-slate-500">자유롭게 이야기를 나누는 공간</p>
+            <h1 id="room-heading" className="text-lg font-bold [overflow-wrap:anywhere]">{room.name}</h1>
+            <p className="mt-0.5 line-clamp-2 text-xs text-slate-500 [overflow-wrap:anywhere]">{room.description || '자유롭게 이야기를 나누는 공간'}</p>
           </div>
         </header>
         <p className="border-b border-indigo-100 bg-indigo-50 px-5 py-3 text-center text-xs leading-5 text-indigo-800">
@@ -50,7 +50,7 @@ export function ChatRoomPage({ messages, onSend }: ChatRoomPageProps) {
           {roomMessages.length === 0 ? (
             <div className="flex min-h-full flex-col items-center justify-center py-10 text-center">
               <span aria-hidden="true" className="mb-5 flex size-16 items-center justify-center rounded-2xl bg-indigo-100 text-3xl text-indigo-600">#</span>
-              <h2 className="text-lg font-semibold">라운지에 오신 것을 환영해요</h2>
+              <h2 className="max-w-full text-lg font-semibold [overflow-wrap:anywhere]">{room.name}에 오신 것을 환영해요</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">아직 메시지가 없어요.<br />가벼운 인사로 대화를 시작해 보세요.</p>
             </div>
           ) : (

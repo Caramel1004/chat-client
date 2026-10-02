@@ -2,10 +2,16 @@ import { useState } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router'
 import { ChatListPage } from './pages/ChatListPage'
 import { ChatRoomPage } from './pages/ChatRoomPage'
-import type { Message } from './types/chat'
+import { rooms as initialRooms } from './data/rooms'
+import type { Message, Room } from './types/chat'
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([])
+  const [rooms, setRooms] = useState<Room[]>(initialRooms)
+
+  function createRoom(details: Omit<Room, 'id'>) {
+    setRooms(previous => [...previous, { ...details, id: crypto.randomUUID() }])
+  }
 
   function sendMessage(roomId: string, text: string) {
     const content = text.trim()
@@ -27,8 +33,8 @@ export default function App() {
         </div>
       </header>
       <Routes>
-        <Route path="/" element={<ChatListPage messages={messages} />} />
-        <Route path="/rooms/:roomId" element={<ChatRoomPage messages={messages} onSend={sendMessage} />} />
+        <Route path="/" element={<ChatListPage rooms={rooms} messages={messages} onCreateRoom={createRoom} />} />
+        <Route path="/rooms/:roomId" element={<ChatRoomPage rooms={rooms} messages={messages} onSend={sendMessage} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>
