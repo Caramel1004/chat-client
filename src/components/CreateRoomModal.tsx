@@ -54,7 +54,7 @@ export function CreateRoomModal({ onClose, onCreate }: CreateRoomModalProps) {
           <p id="room-description-hint" className="mt-1.5 text-xs text-slate-500">최대 120자</p>
         </div>
 
-        <p className="mt-5 rounded-lg bg-slate-50 px-3 py-2.5 text-xs leading-5 text-slate-600">로컬 미리보기에서는 생성한 채팅방이 새로고침하면 사라집니다.</p>
+        <p className="mt-5 rounded-lg bg-slate-50 px-3 py-2.5 text-xs leading-5 text-slate-600">방을 만든 뒤 초대 링크를 공유해 함께 입장할 수 있어요. 대화 기록은 저장하지 않습니다.</p>
         <div className="mt-7 flex justify-end gap-3 border-t border-slate-100 pt-5">
           <button type="button" onClick={() => dialog.current?.close()} className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">취소</button>
           <button type="submit" disabled={!name.trim()} className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500">만들기</button>

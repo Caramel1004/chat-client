@@ -1,11 +1,29 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import App from './App'
+import type { ConnectRoom, Message } from './types/chat'
+
+// In-memory service boundary; real provider behavior is covered by adapter tests.
+function createRelay() {
+  const peers = new Set<{ roomId: string; receive: (message: Message) => void }>()
+  const connectRoom: ConnectRoom = (roomId, callbacks) => {
+    const peer = { roomId, receive: callbacks.onMessage }
+    peers.add(peer)
+    callbacks.onStatus('connected')
+    return {
+      async send(message) {
+        for (const other of peers) if (other.roomId === roomId) other.receive(message)
+      },
+      close() { peers.delete(peer) },
+    }
+  }
+  return connectRoom
+}
 
 function renderApp(path = '/') {
-  return render(<MemoryRouter initialEntries={[path]}><App /></MemoryRouter>)
+  return render(<MemoryRouter initialEntries={[path]}><App connectRoom={createRelay()} /></MemoryRouter>)
 }
 
 describe('채팅 페이지', () => {
@@ -84,7 +102,7 @@ describe('채팅 페이지', () => {
     expect(within(screen.getByRole('log')).getByText('버튼으로 전송')).toBeInTheDocument()
   })
 
-  it('한글 조합 중 Enter와 IME의 keyCode 229를 전송으로 처리하지 않는다', () => {
+  it('한글 조합 중 Enter와 IME의 keyCode 229를 전송으로 처리하지 않는다', async () => {
     renderApp('/rooms/lounge')
     const input = screen.getByRole('textbox', { name: '메시지' })
     fireEvent.change(input, { target: { value: '안녕' } })
@@ -92,7 +110,7 @@ describe('채팅 페이지', () => {
     expect(within(screen.getByRole('log')).queryByText('안녕')).not.toBeInTheDocument()
     fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 })
     expect(within(screen.getByRole('log')).queryByText('안녕')).not.toBeInTheDocument()
-    fireEvent.keyDown(input, { key: 'Enter' })
+    await act(async () => { fireEvent.keyDown(input, { key: 'Enter' }) })
     expect(within(screen.getByRole('log')).getByText('안녕')).toBeInTheDocument()
   })
 
@@ -111,5 +129,73 @@ describe('채팅 페이지', () => {
     renderApp('/rooms/not-a-room')
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '채팅 목록으로' })).toHaveAttribute('href', '/')
+  })
+
+  it('같은 방의 두 클라이언트가 서로의 메시지를 받고 다른 방은 받지 않는다', async () => {
+    const connectRoom = createRelay()
+    const invite = '/rooms/1876a82b-a6ca-4abd-b61f-b1a81852c3fd?name=다른방'
+    const clients = ['/rooms/lounge', '/rooms/lounge', invite].map(path => render(
+      <MemoryRouter initialEntries={[path]}><App connectRoom={connectRoom} /></MemoryRouter>,
+    ))
+    const a = within(clients[0].container)
+    const b = within(clients[1].container)
+    const c = within(clients[2].container)
+    fireEvent.change(a.getByRole('textbox', { name: '메시지' }), { target: { value: 'A의 인사' } })
+    await act(async () => { fireEvent.keyDown(a.getByRole('textbox', { name: '메시지' }), { key: 'Enter' }) })
+    expect(within(a.getByRole('log')).getByText('A의 인사')).toBeInTheDocument()
+    expect(within(b.getByRole('log')).getByText('A의 인사')).toBeInTheDocument()
+    expect(within(b.getByRole('log')).getByText(/게스트/)).toBeInTheDocument()
+    expect(within(c.getByRole('log')).queryByText('A의 인사')).not.toBeInTheDocument()
+    fireEvent.change(b.getByRole('textbox', { name: '메시지' }), { target: { value: 'B의 답장' } })
+    await act(async () => { fireEvent.keyDown(b.getByRole('textbox', { name: '메시지' }), { key: 'Enter' }) })
+    expect(within(a.getByRole('log')).getByText('B의 답장')).toBeInTheDocument()
+    clients[1].unmount()
+    const newcomer = render(<MemoryRouter initialEntries={['/rooms/lounge']}><App connectRoom={connectRoom} /></MemoryRouter>)
+    expect(within(newcomer.container).queryByText('A의 인사')).not.toBeInTheDocument()
+  })
+
+  it('초대 링크로 새로 접속하면 방을 복원하고 목록에서도 다시 입장한다', async () => {
+    const user = userEvent.setup()
+    renderApp('/rooms/1876a82b-a6ca-4abd-b61f-b1a81852c3fd?name=초대방&description=반가워요')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('초대방')
+    await user.click(screen.getByRole('link', { name: '채팅 목록으로' }))
+    await user.click(screen.getByRole('link', { name: /초대방/ }))
+    expect(screen.getByText('반가워요')).toBeInTheDocument()
+  })
+
+  it('연결 오류에서는 전송을 막고 재시도로 새 연결을 만든다', async () => {
+    let attempts = 0
+    const connectRoom: ConnectRoom = (_roomId, callbacks) => {
+      callbacks.onStatus(++attempts === 1 ? 'error' : 'connected')
+      return { send: async () => {}, close() {} }
+    }
+    const user = userEvent.setup()
+    render(<MemoryRouter initialEntries={['/rooms/lounge']}><App connectRoom={connectRoom} /></MemoryRouter>)
+    await user.type(screen.getByRole('textbox', { name: '메시지' }), '보존할 초안')
+    expect(screen.getByRole('button', { name: '메시지 보내기' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: '다시 연결' }))
+    expect(screen.getByRole('textbox', { name: '메시지' })).toHaveValue('보존할 초안')
+    expect(screen.getByRole('button', { name: '메시지 보내기' })).toBeEnabled()
+  })
+
+  it('500개 보관 한도 이후에도 새 메시지가 오면 대화 끝으로 이동한다', () => {
+    let receive: (message: Message) => void = () => {}
+    const connectRoom: ConnectRoom = (_roomId, callbacks) => {
+      receive = callbacks.onMessage
+      callbacks.onStatus('connected')
+      return { send: async () => {}, close() {} }
+    }
+    render(<MemoryRouter initialEntries={['/rooms/lounge']}><App connectRoom={connectRoom} /></MemoryRouter>)
+    const incoming = (index: number): Message => ({
+      id: crypto.randomUUID(), senderId: 'f2ead94b-73a2-4155-aa4d-8d48b930320d',
+      roomId: 'lounge', text: `메시지 ${index}`, sentAt: '2026-10-02T12:00:00.000Z',
+    })
+    act(() => { for (let index = 0; index < 500; index++) receive(incoming(index)) })
+    const board = screen.getByRole('log')
+    Object.defineProperty(board, 'scrollHeight', { configurable: true, value: 1234 })
+    board.scrollTop = 0
+    act(() => { receive(incoming(500)) })
+    expect(within(board).getAllByRole('listitem')).toHaveLength(500)
+    expect(board.scrollTop).toBe(1234)
   })
 })

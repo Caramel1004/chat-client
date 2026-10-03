@@ -1,24 +1,27 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router'
 import { ChatListPage } from './pages/ChatListPage'
 import { ChatRoomPage } from './pages/ChatRoomPage'
 import { rooms as initialRooms } from './data/rooms'
-import type { Message, Room } from './types/chat'
+import type { ConnectRoom, Message, Room } from './types/chat'
+import { connectSupabaseRoom } from './lib/supabaseRoom'
+import { appendMessage } from './lib/messages'
 
-export default function App() {
+export default function App({ connectRoom = connectSupabaseRoom }: { connectRoom?: ConnectRoom }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [rooms, setRooms] = useState<Room[]>(initialRooms)
+  const [senderId] = useState(() => crypto.randomUUID())
+
+  const rememberRoom = useCallback((room: Room) => {
+    setRooms(previous => previous.some(item => item.id === room.id) ? previous : [...previous, room])
+  }, [])
+
+  const receiveMessage = useCallback((message: Message) => {
+    setMessages(previous => appendMessage(previous, message))
+  }, [])
 
   function createRoom(details: Omit<Room, 'id'>) {
     setRooms(previous => [...previous, { ...details, id: crypto.randomUUID() }])
-  }
-
-  function sendMessage(roomId: string, text: string) {
-    const content = text.trim()
-    if (!content) return
-    setMessages(previous => [...previous, {
-      id: crypto.randomUUID(), roomId, text: content, sentAt: new Date().toISOString(),
-    }])
   }
 
   return (
@@ -29,12 +32,13 @@ export default function App() {
             <img src="/favicon.svg" alt="" className="size-9" />
             <span>chat<span className="text-indigo-600">.</span></span>
           </Link>
-          <span className="rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">Beta · 로컬 미리보기</span>
+          <span className="rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">Beta · 공개 채팅</span>
         </div>
       </header>
       <Routes>
-        <Route path="/" element={<ChatListPage rooms={rooms} messages={messages} onCreateRoom={createRoom} />} />
-        <Route path="/rooms/:roomId" element={<ChatRoomPage rooms={rooms} messages={messages} onSend={sendMessage} />} />
+        <Route path="/" element={<ChatListPage rooms={rooms} messages={messages} senderId={senderId} onCreateRoom={createRoom} />} />
+        <Route path="/rooms/:roomId" element={<ChatRoomPage rooms={rooms} messages={messages} senderId={senderId}
+          connectRoom={connectRoom} onReceive={receiveMessage} onJoin={rememberRoom} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>
